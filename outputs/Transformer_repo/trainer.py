@@ -1,0 +1,198 @@
+import os
+import time
+import logging
+import numpy as np
+import torch
+from torch import optim
+from typing import Dict, Any
+from .model import Model
+from .dataset_loader import DatasetLoader
+from .evaluation import Evaluator
+
+# Configure the logger
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class Trainer:
+    """Class to manage the training process of the Transformer model."""
+    
+    def __init__(self, config: Dict[str, Any]):
+        """
+        Initialize the trainer.
+        
+        Args:
+            config: Configuration dictionary containing model and training parameters.
+        """
+        self.config = config
+        
+        # Initialize model
+        self.model = Model(
+            d_model=config['model']['d_model'],
+            n_heads=config['model']['n_heads'],
+            num_layers=config['model']['num_layers'],
+            dropout=config['model']['dropout']
+        )
+        
+        # Initialize optimizer
+        self.optimizer = optim.Adam(
+            self.model.parameters(),
+            lr=config['training']['learning_rate'],
+            betas=(config['optimizer']['beta1'], config['optimizer']['beta2']),
+            eps=config['optimizer']['epsilon']
+        )
+        
+        # Initialize learning rate scheduler
+        self.scheduler = optim.lr_scheduler.LambdaLR(
+            self.optimizer,
+            lambda step: min(step / config['training']['warmup_steps'], 
+                            1.0)
+        )
+        
+        # Initialize dataset loader
+        self.dataset_loader = DatasetLoader(
+            data_path=config['dataset']['data_path'],
+            batch_size=config['training']['batch_size']
+        )
+        
+        # Initialize evaluator
+        self.evaluator = Evaluator(
+            model=self.model,
+            eval_loader=self.dataset_loader.test_loader
+        )
+        
+        # Training state
+        self.current_step = 0
+        self.current_epoch = 0
+        self.start_time = time.time()
+        self.checkpoint_dir = os.path.join('checkpoints', 
+                                          f"transformer_{time.strftime('%Y%m%d_%H%M%S')}")
+
+    def _save_checkpoint(self, filename: str) -> None:
+        """Save the model and optimizer state to a checkpoint file."""
+        os.makedirs(self.checkpoint_dir, exist_ok=True)
+        checkpoint_path = os.path.join(self.checkpoint_dir, filename)
+        
+        torch.save({
+            'model_state_dict': self.model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'scheduler_state_dict': self.scheduler.state_dict(),
+            'current_step': self.current_step,
+            'current_epoch': self.current_epoch
+        }, checkpoint_path)
+        
+        logger.info(f"Saved checkpoint to {checkpoint_path}")
+
+    def _load_checkpoint(self, filename: str) -> None:
+        """Load the model and optimizer state from a checkpoint file."""
+        checkpoint_path = os.path.join(self.checkpoint_dir, filename)
+        if os.path.exists(checkpoint_path):
+            logger.info(f"Loading checkpoint from {checkpoint_path}")
+            checkpoint = torch.load(checkpoint_path)
+            self.model.load_state_dict(checkpoint['model_state_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+            self.current_step = checkpoint['current_step']
+            self.current_epoch = checkpoint['current_epoch']
+            logger.info("Checkpoint loaded successfully")
+
+    def _compute_loss(self, src: torch.Tensor, tgt: torch.Tensor) -> torch.Tensor:
+        """
+        Compute the loss for the current batch.
+        
+        Args:
+            src: Source tensor of shape (batch_size, src_seq_len).
+            tgt: Target tensor of shape (batch_size, tgt_seq_len).
+            
+        Returns:
+            Loss value.
+        """
+        # Forward pass
+        src_mask = torch.ones(src.size(0), 1, src.size(1), src.size(1)).bool()
+        tgt_mask = torch.triu(torch.ones(tgt.size(0), 1, tgt.size(1), tgt.size(1)), diagonal=1).bool()
+        
+        outputs = self.model(src, tgt, src_mask, tgt_mask)
+        
+        # Compute loss
+        criterion = nn.CrossEntropyLoss(label_smoothing=self.config['model']['label_smoothing'])
+        loss = criterion(outputs.view(-1, outputs.size(-1)), tgt.view(-1))
+        
+        return loss
+
+    def train(self) -> None:
+        """Train the model for the specified number of epochs."""
+        self.model.train()
+        
+        while self.current_epoch < self.config['training']['epochs']:
+            for batch in self.dataset_loader.train_loader:
+                self.current_step += 1
+                
+                # Compute loss
+                src = batch['src'].to('cuda')
+                tgt = batch['tgt'].to('cuda')
+                loss = self._compute_loss(src, tgt)
+                
+                # Backward pass and optimization
+                self.optimizer.zero_grad()
+                loss.backward()
+                
+                # Gradient clipping
+                if self.config['training']['gradient_clip'] > 0:
+                    torch.nn.utils.clip_grad_norm_(
+                        self.model.parameters(),
+                        self.config['training']['gradient_clip']
+                    )
+                
+                self.optimizer.step()
+                self.scheduler.step()
+                
+                # Print progress
+                if self.current_step % 100 == 0:
+                    current_lr = self.optimizer.param_groups[0]['lr']
+                    elapsed = time.time() - self.start_time
+                    logger.info(f"Step {self.current_step}, Loss: {loss.item():.3f}, LR: {current_lr:.5f}")
+                
+                # Checkpointing
+                if self.current_step % (self.config['training']['checkpoint_interval'] * 60) == 0:
+                    self._save_checkpoint(f"step_{self.current_step}.pt")
+                
+                # Evaluation
+                if self.current_step % self.config['training']['evaluation_interval'] == 0:
+                    self.evaluate()
+            
+            self.current_epoch += 1
+
+    def evaluate(self) -> Dict[str, float]:
+        """Evaluate the model and return the metrics."""
+        metrics = self.evaluator.evaluate()
+        logger.info(f"Evaluation metrics at step {self.current_step}: {metrics}")
+        return metrics
+
+    def resume_training(self, checkpoint_file: str) -> None:
+        """Resume training from a checkpoint."""
+        self._load_checkpoint(checkpoint_file)
+
+# Example usage
+if __name__ == '__main__':
+    import yaml
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Transformer Trainer')
+    parser.add_argument('--config', type=str, default='config.yaml',
+                       help='Path to the configuration file')
+    parser.add_argument('--resume', type=str, default=None,
+                       help='Path to the checkpoint file to resume training')
+    args = parser.parse_args()
+    
+    # Load configuration
+    with open(args.config, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    # Initialize trainer
+    trainer = Trainer(config)
+    
+    # Resume training if specified
+    if args.resume:
+        trainer.resume_training(args.resume)
+    
+    # Start training
+    trainer.train()

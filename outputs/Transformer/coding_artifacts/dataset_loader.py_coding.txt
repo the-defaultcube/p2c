@@ -1,0 +1,205 @@
+<think>
+```python
+import os
+import logging
+import numpy as np
+from torch.utils.data import Dataset, DataLoader
+from tokenizers import SentencePieceTokenizer
+from typing import List, Dict, Any
+
+# Configure the logger
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class WMTDataset(Dataset):
+    """Custom dataset class for WMT data."""
+    
+    def __init__(self, 
+                 data: List[Dict[str, str]], 
+                 src_lang: str, 
+                 tgt_lang: str, 
+                 src_tokenizer, 
+                 tgt_tokenizer, 
+                 max_length: int = 100):
+        """
+        Initialize the WMT dataset.
+        
+        Args:
+            data: List of dictionaries containing source and target text.
+            src_lang: Source language code.
+            tgt_lang: Target language code.
+            src_tokenizer: Tokenizer for the source language.
+            tgt_tokenizer: Tokenizer for the target language.
+            max_length: Maximum sequence length (default: 100).
+        """
+        self.data = data
+        self.src_lang = src_lang
+        self.tgt_lang = tgt_lang
+        self.src_tokenizer = src_tokenizer
+        self.tgt_tokenizer = tgt_tokenizer
+        self.max_length = max_length
+        
+        # Precompute tokenized sequences
+        self.src_sequences = []
+        self.tgt_sequences = []
+        
+        for item in self.data:
+            src_text = item[src_lang]
+            tgt_text = item[tgt_lang]
+            
+            # Tokenize source and target
+            src_tokens = self.src_tokenizer.encode(src_text).tokens
+            tgt_tokens = self.tgt_tokenizer.encode(tgt_text).tokens
+            
+            # Convert to IDs
+            src_ids = self.src_tokenizer.convert_tokens_to_ids(src_tokens)
+            tgt_ids = self.tgt_tokenizer.convert_tokens_to_ids(tgt_tokens)
+            
+            # Truncate or pad
+            src_ids = src_ids[:self.max_length] + [self.src_tokenizer.eos_id()]*max(0, self.max_length - len(src_ids))
+            tgt_ids = tgt_ids[:self.max_length] + [self.tgt_tokenizer.eos_id()]*max(0, self.max_length - len(tgt_ids))
+            
+            self.src_sequences.append(src_ids)
+            self.tgt_sequences.append(tgt_ids)
+            
+        logger.info(f"Loaded {len(self)} samples.")
+
+    def __len__(self) -> int:
+        """Return the number of samples."""
+        return len(self.data)
+
+    def __getitem__(self, idx: int) -> Dict[str, List[int]]:
+        """Get a single sample by index."""
+        return {
+            'src': self.src_sequences[idx],
+            'tgt': self.tgt_sequences[idx]
+        }
+
+class DatasetLoader:
+    """Class to load and preprocess WMT datasets."""
+    
+    def __init__(self, 
+                 data_path: str = 'data',
+                 batch_size: int = 25000):
+        """
+        Initialize the dataset loader.
+        
+        Args:
+            data_path: Path to the data directory.
+            batch_size: Batch size for the DataLoaders.
+        """
+        self.data_path = data_path
+        self.batch_size = batch_size
+        
+        # Load configuration
+        self.config = self._load_config()
+        
+        # Initialize tokenizers
+        self.src_tokenizer, self.tgt_tokenizer = self._init_tokenizers()
+        
+        # Load data
+        self.data = self._load_wmt_data()
+        
+        # Create splits
+        self.train_data, self.val_data, self.test_data = self._create_splits()
+        
+        # Create datasets
+        self.train_dataset = self._create_dataset(self.train_data)
+        self.val_dataset = self._create_dataset(self.val_data)
+        self.test_dataset = self._create_dataset(self.test_data)
+        
+        # Create DataLoaders
+        self.train_loader = DataLoader(self.train_dataset, 
+                                      batch_size=self.batch_size, 
+                                      shuffle=True, 
+                                      num_workers=4)
+        self.val_loader = DataLoader(self.val_dataset, 
+                                    batch_size=self.batch_size, 
+                                    shuffle=False, 
+                                    num_workers=4)
+        self.test_loader = DataLoader(self.test_dataset, 
+                                     batch_size=self.batch_size, 
+                                     shuffle=False, 
+                                     num_workers=4)
+
+    def _load_config(self) -> Dict[str, Any]:
+        """Load configuration from YAML file."""
+        import yaml
+        with open(os.path.join(self.data_path, 'config.yaml'), 'r') as f:
+            return yaml.safe_load(f)
+
+    def _init_tokenizers(self) -> tuple[SentencePieceTokenizer, SentencePieceTokenizer]:
+        """Initialize tokenizers for source and target languages."""
+        # For English-German (BPE)
+        src_tokenizer = SentencePieceTokenizer(os.path.join(self.data_path, 'bpe.model'), 
+                                               language='en')
+        
+        # For English-French (word-piece)
+        tgt_tokenizer = SentencePieceTokenizer(os.path.join(self.data_path, 'wordpiece.model'), 
+                                               language='en')
+        
+        return src_tokenizer, tgt_tokenizer
+
+    def _load_wmt_data(self) -> List[Dict[str, str]]:
+        """Load WMT data from text files."""
+        data = []
+        languages = ['english_german', 'english_french']
+        
+        for lang_pair in languages:
+            src_lang, tgt_lang = lang_pair.split('_')
+            with open(os.path.join(self.data_path, f'{lang_pair}.train'), 'r') as f:
+                for line in f:
+                    src, tgt = line.strip().split('\t')
+                    data.append({src_lang: src, tgt_lang: tgt})
+        
+        logger.info(f"Loaded {len(data)} samples from WMT dataset.")
+        return data
+
+    def _create_splits(self) -> tuple[List[Dict[str, str]], List[Dict[str, str]], List[Dict[str, str]]]:
+        """Split the data into training, validation, and test sets."""
+        # Random seed for reproducibility
+        np.random.seed(42)
+        
+        # Split indices
+        indices = list(range(len(self.data)))
+        np.random.shuffle(indices)
+        
+        train_idx = indices[:int(0.9 * len(indices))]
+        val_idx = indices[int(0.9 * len(indices)):int(0.95 * len(indices))]
+        test_idx = indices[int(0.95 * len(indices)):]
+        
+        return [self.data[i] for i in train_idx], [self.data[i] for i in val_idx], [self.data[i] for i in test_idx]
+
+    def _create_dataset(self, data: List[Dict[str, str]]) -> WMTDataset:
+        """Create a WMTDataset instance from the given data."""
+        return WMTDataset(data, 'en', 'de', self.src_tokenizer, self.tgt_tokenizer, max_length=self.config['dataset']['max_length'])
+
+    def load_data(self) -> Dict[str, DataLoader]:
+        """Return the DataLoaders for training, validation, and test."""
+        return {
+            'train': self.train_loader,
+            'val': self.val_loader,
+            'test': self.test_loader
+        }
+
+# Example usage
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(description='WMT Dataset Loader')
+    parser.add_argument('--data_path', type=str, default='data', 
+                       help='Path to the data directory')
+    parser.add_argument('--batch_size', type=int, default=25000,
+                       help='Batch size for data loading')
+    args = parser.parse_args()
+    
+    loader = DatasetLoader(data_path=args.data_path, batch_size=args.batch_size)
+    data_loaders = loader.load_data()
+    
+    # Example: Get a batch from training data
+    for batch in data_loaders['train']:
+        src = batch['src']
+        tgt = batch['tgt']
+        print(f"Source batch shape: {src.shape}")
+        print(f"Target batch shape: {tgt.shape}")
+        break
+```

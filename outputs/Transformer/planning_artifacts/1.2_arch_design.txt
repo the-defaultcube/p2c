@@ -1,0 +1,24 @@
+----------------------------------------
+[Implementation approach]
+We will implement the Transformer model using PyTorch, focusing on modular design and reusability. The implementation will include separate modules for the encoder, decoder, attention mechanisms, and positional encoding. We will use standard libraries for data loading and optimization, and ensure compatibility with GPU training.
+
+----------------------------------------
+[File list]
+- main.py
+- model.py
+- trainer.py
+- evaluation.py
+- dataset_loader.py
+
+----------------------------------------
+[Data structures and interfaces]
+classDiagramclass Model {+d_model: int+n_heads: int+num_layers: int+encoder_layers: list+decoder_layers: list+positional_encoding: function+__init__(d_model: int, n_heads: int, num_layers: int)+forward(src: Tensor, tgt: Tensor) -> Tensor}class EncoderLayer {+self_attn: MultiHeadAttention+feed_forward: nn.Sequential+__init__(d_model: int, d_ff: int, n_heads: int)+forward(x: Tensor) -> Tensor}class DecoderLayer {+self_attn: MultiHeadAttention+enc_dec_attn: MultiHeadAttention+feed_forward: nn.Sequential+__init__(d_model: int, d_ff: int, n_heads: int)+forward(x: Tensor, memory: Tensor) -> Tensor}class MultiHeadAttention {+n_heads: int+d_k: int+d_v: int+W_q: Linear+W_k: Linear+W_v: Linear+W_o: Linear+__init__(d_model: int, n_heads: int)+forward(q: Tensor, k: Tensor, v: Tensor, mask: Tensor) -> Tensor}class DatasetLoader {+data_path: str+batch_size: int+__init__(data_path: str, batch_size: int)+load_data() -> DataLoader}class Trainer {+model: Model+optimizer: Optimizer+scheduler: Scheduler+train_loader: DataLoader+__init__(model: Model, optimizer: Optimizer, scheduler: Scheduler, train_loader: DataLoader)+train_epoch() -> float+train() -> None}class Evaluation {+model: Model+eval_loader: DataLoader+__init__(model: Model, eval_loader: DataLoader)+evaluate() -> dict+compute_bleu() -> float}Model --> EncoderLayerModel --> DecoderLayerModel --> MultiHeadAttentionModel --> DatasetLoaderModel --> TrainerModel --> EvaluationTrainer --> ModelEvaluation --> Model
+
+----------------------------------------
+[Program call flow]
+sequenceDiagramparticipant M as Mainparticipant DL as DatasetLoaderparticipant MD as Modelparticipant TR as Trainerparticipant EV as EvaluationM->>DL: load_data()DL-->>M: return data_loadersM->>MD: initialize model()M->>TR: train(model, data_loaders)TR->>MD: forward(x, tgt)MD-->>TR: lossTR->>M: training completeM->>EV: evaluate(model, data_loaders)EV->>MD: forward(x, tgt)MD-->>EV: predictionsEV-->>M: metrics
+
+----------------------------------------
+[Anything UNCLEAR]
+Need clarification on the exact tokenization method and any additional hyperparameters not explicitly mentioned in the paper.
+

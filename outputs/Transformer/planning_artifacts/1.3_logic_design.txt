@@ -1,0 +1,66 @@
+----------------------------------------
+[Required packages]
+- torch==1.9.0
+- numpy==1.21.0
+- tokenizers==0.9.1
+
+----------------------------------------
+[Required Other language third-party packages]
+- No third-party dependencies required
+
+----------------------------------------
+[Logic Analysis]
+- ['dataset_loader.py', 'Handles loading and preprocessing of WMT datasets. Implements byte-pair encoding for English-German and word-piece encoding for English-French. Provides DataLoaders for training and evaluation.']
+- ['model.py', 'Implements the Transformer model architecture. Includes EncoderLayer, DecoderLayer, MultiHeadAttention, and positional encoding. Uses PyTorch modules for compatibility with GPU training.']
+- ['trainer.py', 'Manages the training process. Implements the training loop, loss calculation, and optimizer scheduling. Handles checkpointing and model saving.']
+- ['evaluation.py', 'Contains evaluation metrics and functions. Implements BLEU score calculation for translation tasks and F1 score for constituency parsing. Handles beam search for translation.']
+- ['main.py', 'Entry point for the system. Orchestrates the loading of data, model initialization, training, and evaluation. Implements the overall workflow.']
+
+----------------------------------------
+[Task list]
+- dataset_loader.py
+- model.py
+- trainer.py
+- evaluation.py
+- main.py
+
+----------------------------------------
+[Full API spec]
+openapi: 3.0.0
+
+components:
+  schemas:
+    ModelConfig:
+      type: object
+      properties:
+        d_model:
+          type: integer
+          default: 512
+        n_heads:
+          type: integer
+          default: 8
+        num_layers:
+          type: integer
+          default: 6
+    TrainingConfig:
+      type: object
+      properties:
+        batch_size:
+          type: integer
+          default: 25000
+        learning_rate:
+          type: number
+          default: 0.0001
+        warmup_steps:
+          type: integer
+          default: 4000
+
+
+----------------------------------------
+[Shared Knowledge]
+Both data_preprocessing.py and trainer.py share the ModelConfig and TrainingConfig schemas for consistent parameter handling. The evaluation.py module uses the same tokenizer and encoding schemes as dataset_loader.py.
+
+----------------------------------------
+[Anything UNCLEAR]
+Clarification needed on the exact tokenization method (e.g., byte-pair encoding vs. word-piece encoding) and any additional hyperparameters not explicitly mentioned in the paper.
+
