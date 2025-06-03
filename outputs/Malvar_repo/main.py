@@ -1,0 +1,108 @@
+import os
+import yaml
+import argparse
+import logging
+from typing import List, Dict, Any
+import numpy as np
+from dataset_loader import DatasetLoader
+from interpolation import BilinearInterpolator, GradientCorrectedInterpolator
+from evaluation import Evaluator
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def main():
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description='Main script for image demosaicing.')
+    parser.add_argument('--config', type=str, default='config.yaml', 
+                       help='Path to configuration file.')
+    args = parser.parse_args()
+
+    # Load configuration
+    with open(args.config, 'r') as f:
+        config = yaml.safe_load(f)
+
+    # Initialize DatasetLoader
+    logger.info('Initializing DatasetLoader...')
+    dataset_loader = DatasetLoader(root_dir=config['data']['root_dir'])
+    dataset = dataset_loader.load_data()
+
+    if not dataset:
+        logger.error('No images loaded. Exiting.')
+        return
+
+    # Initialize interpolators
+    logger.info('Initializing interpolators...')
+    bilinear_interpolator = BilinearInterpolator()
+    gradient_interpolator = GradientCorrectedInterpolator(
+        alpha=config['interpolation']['gain_factors']['alpha'],
+        beta=config['interpolation']['gain_factors']['beta'],
+        gamma=config['interpolation']['gain_factors']['gamma']
+    )
+
+    # Perform interpolation
+    logger.info('Performing interpolation...')
+    bilinear_results = []
+    gradient_results = []
+    original_images = []
+
+    for image in dataset:
+        # Ensure image is in the correct format
+        if image.ndim != 3 or image.shape[2] != 3:
+            logger.error(f'Invalid image shape: {image.shape}. Skipping.')
+            continue
+
+        original_images.append(image)
+        # Apply Bayer pattern
+        bayer_image = dataset_loader.apply_bayer_pattern(image)
+
+        # Bilinear interpolation
+        try:
+            bilinear_interpolated = bilinear_interpolator.interpolate(bayer_image)
+            bilinear_results.append(bilinear_interpolated)
+        except Exception as e:
+            logger.error(f'Bilinear interpolation failed: {e}')
+            continue
+
+        # Gradient-corrected interpolation
+        try:
+            gradient_interpolated = gradient_interpolator.interpolate(bayer_image)
+            gradient_results.append(gradient_interpolated)
+        except Exception as e:
+            logger.error(f'Gradient-corrected interpolation failed: {e}')
+            continue
+
+    # Evaluate results
+    logger.info('Initializing Evaluator...')
+    evaluator = Evaluator()
+
+    if not original_images:
+        logger.error('No valid original images to evaluate. Exiting.')
+        return
+
+    if len(original_images) != len(bilinear_results) or \
+       len(original_images) != len(gradient_results):
+        logger.error('Mismatch in number of images for evaluation. Exiting.')
+        return
+
+    logger.info('Evaluating results...')
+    try:
+        psnr_bilinear = evaluator.compute_psnr(original_images, bilinear_results)
+        psnr_gradient = evaluator.compute_psnr(original_images, gradient_results)
+    except Exception as e:
+        logger.error(f'Evaluation failed: {e}')
+        return
+
+    logger.info(f'PSNR (Bilinear): {psnr_bilinear} dB')
+    logger.info(f'PSNR (Gradient-corrected): {psnr_gradient} dB')
+
+    # Visualize results
+    logger.info('Visualizing results...')
+    try:
+        evaluator.visualize_results(original_images, bilinear_results, gradient_results)
+    except Exception as e:
+        logger.error(f'Visualization failed: {e}')
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,38 @@
+## config.yaml
+interpolation:
+  method: gradient_corrected
+  gain_factors:
+    alpha: 0.5
+    beta: 0.625
+    gamma: 0.75
+
+evaluation:
+  metrics:
+    - psnr
+  dataset: kodak
+
+data:
+  root_dir: ./data/kodak
+  preprocessing:
+    bayer_pattern: true
+    lowpass_filter: false  # As per paper's note on no filtering applied
+
+interpolator:
+  type: linear
+  filter_size: 5x5
+  filter_coefficients:  # Refer to Figure 2 in the paper for exact values
+    g: [0.05, 0.15, 0.25, 0.15, 0.05,
+        0.15, 0.35, 0.5, 0.35, 0.15,
+        0.25, 0.5, 1.0, 0.5, 0.25,
+        0.15, 0.35, 0.5, 0.35, 0.15,
+        0.05, 0.15, 0.25, 0.15, 0.05]
+    r: [0.05, 0.15, 0.25, 0.15, 0.05,
+        0.15, 0.35, 0.5, 0.35, 0.15,
+        0.25, 0.5, 1.0, 0.5, 0.25,
+        0.15, 0.35, 0.5, 0.35, 0.15,
+        0.05, 0.15, 0.25, 0.15, 0.05]
+    b: [0.05, 0.15, 0.25, 0.15, 0.05,
+        0.15, 0.35, 0.5, 0.35, 0.15,
+        0.25, 0.5, 1.0, 0.5, 0.25,
+        0.15, 0.35, 0.5, 0.35, 0.15,
+        0.05, 0.15, 0.25, 0.15, 0.05]

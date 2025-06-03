@@ -1,0 +1,191 @@
+<think>
+```python
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+from typing import List, Dict, Any
+from .utils import save_image, load_image
+
+class Evaluator:
+    def __init__(self, original: np.ndarray, interpolated: np.ndarray):
+        """
+        Initialize the Evaluator with original and interpolated images.
+
+        Args:
+            original: NumPy array representing the original image.
+            interpolated: NumPy array representing the interpolated image.
+        """
+        self.original = original
+        self.interpolated = interpolated
+
+    def compute_psnr(self) -> float:
+        """
+        Compute the Peak Signal-to-Noise Ratio (PSNR) between the original and interpolated images.
+
+        Returns:
+            PSNR value in dB.
+        """
+        if self.original.ndim != 2 and self.original.shape[2] != 3:
+            raise ValueError("Original image must be in grayscale or RGB format.")
+        if self.interpolated.ndim != 2 and self.interpolated.shape[2] != 3:
+            raise ValueError("Interpolated image must be in grayscale or RGB format.")
+
+        # Ensure images are in the same dimensions
+        if self.original.shape != self.interpolated.shape:
+            raise ValueError("Original and interpolated images must have the same dimensions.")
+
+        # If the image is grayscale, reshape to 2D
+        if self.original.ndim == 2:
+            original = self.original.reshape(-1)
+            interpolated = self.interpolated.reshape(-1)
+        else:
+            original = self.original.reshape(-1, 3)
+            interpolated = self.interpolated.reshape(-1, 3)
+
+        # Convert to float for accurate calculations
+        original = original.astype(np.float32)
+        interpolated = interpolated.astype(np.float32)
+
+        # Compute MSE
+        mse = np.mean((original - interpolated) ** 2, axis=0)
+        if original.ndim == 2:
+            mse = mse[0]  # For grayscale, take the first channel
+
+        # Compute PSNR
+        max_val = 255.0  # Assuming 8-bit images
+        psnr = 10 * np.log10((max_val ** 2) / mse)
+
+        return psnr
+
+    def compute_metrics(self, method_names: List[str]) -> Dict[str, Any]:
+        """
+        Compute evaluation metrics for the interpolated images.
+
+        Args:
+            method_names: List of names corresponding to the interpolation methods.
+
+        Returns:
+            Dictionary containing the evaluation metrics.
+        """
+        # Compute PSNR for each method
+        psnr_values = []
+        for method in method_names:
+            # Assuming each method produces an interpolated image
+            evaluator = Evaluator(self.original, self.interpolated)
+            psnr = evaluator.compute_psnr()
+            psnr_values.append(psnr)
+
+        # Create results dictionary
+        results = {
+            "psnr": psnr_values,
+            "method_names": method_names
+        }
+
+        return results
+
+    def visualize_results(self, output_dir: str = "evaluation_results") -> None:
+        """
+        Generate visual comparisons of the original and interpolated images.
+
+        Args:
+            output_dir: Directory to save the visualization plots.
+        """
+        # Ensure the output directory exists
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Create a figure with subplots
+        fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+        axes[0].imshow(self.original)
+        axes[0].set_title('Original Image')
+        axes[1].imshow(self.interpolated)
+        axes[1].set_title('Interpolated Image')
+
+        # Adjust layout and display
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, 'comparison_plot.png'))
+        plt.close()
+
+    def __repr__(self) -> str:
+        """
+        Return a string representation of the evaluator.
+
+        Returns:
+            String with class name and evaluation details.
+        """
+        return f"Evaluator(original={self.original.shape}, interpolated={self.interpolated.shape})"
+
+def evaluate_images(original_images: List[np.ndarray], 
+                   interpolated_images: List[np.ndarray], 
+                   method_names: List[str]) -> Dict[str, Any]:
+    """
+    Evaluate a list of original and interpolated images.
+
+    Args:
+        original_images: List of original images.
+        interpolated_images: List of interpolated images.
+        method_names: List of names corresponding to the interpolation methods.
+
+    Returns:
+        Dictionary containing the evaluation metrics for all images.
+    """
+    results = {}
+
+    # Ensure the same number of images
+    if len(original_images) != len(interpolated_images):
+        raise ValueError("Number of original and interpolated images must match.")
+
+    # Compute metrics for each image
+    for i in range(len(original_images)):
+        original = original_images[i]
+        interpolated = interpolated_images[i]
+        method_name = method_names[i]
+
+        evaluator = Evaluator(original, interpolated)
+        psnr = evaluator.compute_psnr()
+        if method_name not in results:
+            results[method_name] = []
+        results[method_name].append(psnr)
+
+    return results
+
+def visualize_methods(original_images: List[np.ndarray], 
+                     interpolated_images: List[np.ndarray], 
+                     method_names: List[str], 
+                     output_dir: str = "evaluation_results") -> None:
+    """
+    Visualize the results of different interpolation methods.
+
+    Args:
+        original_images: List of original images.
+        interpolated_images: List of interpolated images.
+        method_names: List of names corresponding to the interpolation methods.
+        output_dir: Directory to save the visualization plots.
+    """
+    # Ensure the same number of images
+    if len(original_images) != len(interpolated_images):
+        raise ValueError("Number of original and interpolated images must match.")
+
+    # Create a figure with subplots
+    n_images = len(original_images)
+    fig, axes = plt.subplots(n_images, 2, figsize=(12, 3 * n_images))
+
+    for i in range(n_images):
+        original = original_images[i]
+        interpolated = interpolated_images[i]
+        method = method_names[i]
+
+        # Plot original image
+        axes[i, 0].imshow(original)
+        axes[i, 0].set_title(f'Original Image {i+1}')
+        axes[i, 0].axis('off')
+
+        # Plot interpolated image
+        axes[i, 1].imshow(interpolated)
+        axes[i, 1].set_title(f'{method} Interpolated Image {i+1}')
+        axes[i, 1].axis('off')
+
+    # Adjust layout and display
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'methods_comparison.png'))
+    plt.close()
+```

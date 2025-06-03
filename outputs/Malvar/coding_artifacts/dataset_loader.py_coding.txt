@@ -1,0 +1,101 @@
+<think>
+```python
+import os
+from typing import List, Optional
+import numpy as np
+from PIL import Image
+
+class DatasetLoader:
+    def __init__(self, root_dir: str = "./data/kodak"):
+        """
+        Initialize the DatasetLoader with the root directory of the Kodak image set.
+
+        Args:
+            root_dir: Path to the directory containing the Kodak images.
+        """
+        self.root_dir = root_dir
+        self.images: List[Optional[np.ndarray]] = []
+
+    def load_data(self) -> List[np.ndarray]:
+        """
+        Load all images from the specified root directory.
+
+        Returns:
+            A list of NumPy arrays representing the loaded images.
+        """
+        # Clear existing images
+        self.images = []
+
+        # Walk through the directory
+        for root, _, files in os.walk(self.root_dir):
+            for file in files:
+                if file.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif")):
+                    # Load the image
+                    img_path = os.path.join(root, file)
+                    img = self._load_image(img_path)
+                    if img is not None:
+                        self.images.append(img)
+
+        return self.images
+
+    def apply_bayer_pattern(self, image: np.ndarray) -> np.ndarray:
+        """
+        Apply the Bayer pattern downsampling to the input image.
+
+        Args:
+            image: NumPy array representing the input image.
+
+        Returns:
+            NumPy array representing the downsampled image with the Bayer pattern applied.
+        """
+        # Ensure the image is in the correct format
+        if image.ndim != 2 and image.shape[2] != 3:
+            raise ValueError("Input image must be in RGB format.")
+
+        # Get the dimensions of the image
+        height, width = image.shape[:2]
+
+        # If the dimensions are odd, crop to the nearest even dimensions
+        if height % 2 != 0 or width % 2 != 0:
+            height = height // 2 * 2
+            width = width // 2 * 2
+
+        # Initialize the downsampled image
+        downsampled = np.zeros((height // 2, width // 2, 3), dtype=np.float32)
+
+        # Iterate over each 2x2 block
+        for i in range(0, height, 2):
+            for j in range(0, width, 2):
+                # Extract the 2x2 block
+                block = image[i:i+2, j:j+2, :]
+
+                # Apply the Bayer pattern
+                # Top-left: Green (G)
+                downsampled[i//2, j//2, 1] = block[0, 0, 1]
+                # Top-right: Red (R)
+                downsampled[i//2, (j//2)+1, 0] = block[0, 1, 0]
+                # Bottom-left: Blue (B)
+                downsampled[(i//2)+1, j//2, 2] = block[1, 0, 2]
+                # Bottom-right: Green (G)
+                downsampled[(i//2)+1, (j//2)+1, 1] = block[1, 1, 1]
+
+        return downsampled
+
+    def _load_image(self, path: str) -> Optional[np.ndarray]:
+        """
+        Load an image from the specified path.
+
+        Args:
+            path: Path to the image file.
+
+        Returns:
+            NumPy array representing the loaded image, or None if the file could not be loaded.
+        """
+        try:
+            img = Image.open(path)
+            img = np.array(img, dtype=np.float32) / 255.0
+            return img
+        except Exception as e:
+            print(f"Error loading image {path}: {e}")
+            return None
+```

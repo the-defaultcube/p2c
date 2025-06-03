@@ -3,8 +3,8 @@ export OPENAI_API_KEY="API-KEY"
 PY="python3"
 
 # GPT_VERSION="o3-mini"
-# GPT_VERSION="deepseek-ai/DeepSeek-R1-Distill-Qwen-14B" # together
-GPT_VERSION="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free" # together
+GPT_VERSION="deepseek-ai/DeepSeek-R1-Distill-Qwen-14B" # together
+# GPT_VERSION="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free" # together
 
 
 
@@ -17,8 +17,8 @@ GPT_VERSION="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free" # together
 
 PAPER_NAME="Malvar"
 PDF_PATH="../example/Malvar.pdf" # .pdf
-PDF_JSON_PATH="../examples/Malvar.json" # .json
-PDF_JSON_CLEANED_PATH="../examples/Malvar_cleaned.json" # _cleaned.json
+PDF_JSON_PATH="../example/Malvar.json" # .json
+PDF_JSON_CLEANED_PATH="../example/Malvar_cleaned.json" # _cleaned.json
 OUTPUT_DIR="../outputs/Malvar"
 OUTPUT_REPO_DIR="../outputs/Malvar_repo"
 

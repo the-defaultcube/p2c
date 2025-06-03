@@ -1,0 +1,124 @@
+<think>
+```python
+import numpy as np
+from typing import Dict, Any
+from .utils import save_image, load_image
+
+class FilterApplier:
+    def __init__(self):
+        """
+        Initialize the FilterApplier with default settings.
+        """
+        pass
+
+    def get_filter_coefficients(self, channel: str) -> np.ndarray:
+        """
+        Retrieve the 5x5 filter coefficients for the specified channel.
+
+        Args:
+            channel: The color channel ('r', 'g', 'b').
+
+        Returns:
+            A 5x5 NumPy array of filter coefficients.
+        """
+        config = {
+            'g': [
+                [0.05, 0.15, 0.25, 0.15, 0.05],
+                [0.15, 0.35, 0.5, 0.35, 0.15],
+                [0.25, 0.5, 1.0, 0.5, 0.25],
+                [0.15, 0.35, 0.5, 0.35, 0.15],
+                [0.05, 0.15, 0.25, 0.15, 0.05]
+            ],
+            'r': [
+                [0.05, 0.15, 0.25, 0.15, 0.05],
+                [0.15, 0.35, 0.5, 0.35, 0.15],
+                [0.25, 0.5, 1.0, 0.5, 0.25],
+                [0.15, 0.35, 0.5, 0.35, 0.15],
+                [0.05, 0.15, 0.25, 0.15, 0.05]
+            ],
+            'b': [
+                [0.05, 0.15, 0.25, 0.15, 0.05],
+                [0.15, 0.35, 0.5, 0.35, 0.15],
+                [0.25, 0.5, 1.0, 0.5, 0.25],
+                [0.15, 0.35, 0.5, 0.35, 0.15],
+                [0.05, 0.15, 0.25, 0.15, 0.05]
+            ]
+        }
+        if channel not in config:
+            raise ValueError(f"Invalid channel: {channel}. Expected 'r', 'g', or 'b'.")
+        return np.array(config[channel], dtype=np.float32)
+
+    def apply_filter(self, image: np.ndarray, filter_coeff: np.ndarray) -> np.ndarray:
+        """
+        Apply the 5x5 filter to the input image.
+
+        Args:
+            image: NumPy array representing the input image (single channel).
+            filter_coeff: 5x5 NumPy array of filter coefficients.
+
+        Returns:
+            NumPy array representing the filtered image.
+        """
+        if image.ndim != 2:
+            raise ValueError("Input image must be a 2D array (single channel).")
+        if filter_coeff.shape != (5, 5):
+            raise ValueError("Filter coefficients must be a 5x5 array.")
+
+        height, width = image.shape
+        filtered = np.zeros_like(image, dtype=np.float32)
+
+        # Pad the image to handle edges
+        padded = np.pad(image, pad_width=2, mode='constant', constant_values=0)
+
+        for i in range(height):
+            for j in range(width):
+                # Extract 5x5 neighborhood
+                neighborhood = padded[i:i+5, j:j+5]
+                # Apply filter coefficients
+                filtered_value = np.sum(neighborhood * filter_coeff)
+                filtered[i, j] = filtered_value
+
+        return filtered
+
+    def process_image(self, image: np.ndarray) -> np.ndarray:
+        """
+        Process the input image by applying the 5x5 filter to each channel.
+
+        Args:
+            image: NumPy array representing the input image (RGB).
+
+        Returns:
+            NumPy array representing the filtered image (RGB).
+        """
+        if image.ndim != 3 or image.shape[2] != 3:
+            raise ValueError("Input image must be in RGB format.")
+
+        # Split into channels
+        r = image[:, :, 0]
+        g = image[:, :, 1]
+        b = image[:, :, 2]
+
+        # Get filter coefficients for each channel
+        filter_r = self.get_filter_coefficients('r')
+        filter_g = self.get_filter_coefficients('g')
+        filter_b = self.get_filter_coefficients('b')
+
+        # Apply filters
+        r_filtered = self.apply_filter(r, filter_r)
+        g_filtered = self.apply_filter(g, filter_g)
+        b_filtered = self.apply_filter(b, filter_b)
+
+        # Combine channels
+        filtered_image = np.stack([r_filtered, g_filtered, b_filtered], axis=2)
+
+        return filtered_image
+
+    def __repr__(self) -> str:
+        """
+        Return a string representation of the filter applier.
+
+        Returns:
+            String with class name and filter details.
+        """
+        return "FilterApplier(5x5 linear filter)"
+```
